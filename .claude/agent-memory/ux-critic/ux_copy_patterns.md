@@ -17,3 +17,23 @@ type: project
 - Trust breakdown bars truncate issue labels to 8 characters which can produce mid-character cuts and looks like a rendering bug. Trust labels need a longer budget or a different layout.
 - Defaulting IssueList to "전체" (all) filter mixes passes and failures with no natural priority order. Fail items should sort to the top or the default filter should be "fail" so the user immediately sees what needs fixing.
 - Section headers that describe what a section is ("점수 향상 효과가 가장 큰 항목") are weaker than headers that instruct ("Start here — 5 changes that move your score most").
+- Action text in TopIssues rows is text-xs (0.75rem) which is too small given it is the most important copy on the page. It should be text-sm at minimum.
+- The breakdown bar section (4 cards, 3 bars each) adds 12 raw numbers with no associated action. It belongs behind a disclosure toggle, not in the primary reading flow.
+- The IssueList tab bar shows flat buttons with no failure count annotation. Users cannot see which tab has the most failures without clicking through all four.
+- English grade words (Excellent/Good/Fair/Poor) mixed with Korean copy everywhere else reads as unfinished. The language of grade labels must be consistent with the surrounding UI language.
+- The score card horizontal layout (gauge + 4 sub-gauges + divider + meta + PageSpeed) overloads the verdict moment. The overall score should land before sub-scores compete for attention.
+
+## Recommended section order for results page
+
+1. Compact input bar (always visible)
+2. Verdict strip — score number + grade + one plain-language sentence
+3. Sub-score row (SEO/AEO/GEO/Trust) — smaller weight than verdict
+4. TopIssues panel — "Start here — these 5 changes move your score the most"
+5. Detail tabs + IssueList (reference, not decision)
+6. Appendix: PageSpeed, site type, markdown preview (collapsible)
+
+## Typography principles
+
+- Font size should map to decision weight: overall score largest, grade second, sub-scores third, issue labels fourth, detail fifth.
+- Use font weight (normal/medium/semibold) to communicate hierarchy on the same color; avoid reduced opacity as the primary de-emphasis tool on dark backgrounds.
+- 4px base spatial unit applied consistently: card internal padding 24px (p-6), section gaps 24px or 32px, not mixed.

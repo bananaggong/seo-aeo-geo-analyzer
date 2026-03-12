@@ -1,58 +1,39 @@
 "use client";
 import { useState } from "react";
-import { ScoreGauge } from "./components/ScoreGauge";
 import { IssueList } from "./components/IssueList";
 import { MarkdownPreview } from "./components/MarkdownPreview";
 import { TopIssues } from "./components/TopIssues";
-
-interface SiteTypeResult {
-  type: string;
-  label: string;
-  confidence: number;
-  signals: string[];
-}
+import { ScoreStrip } from "./components/ScoreStrip";
+import { MetaDrawer } from "./components/MetaDrawer";
+import { CategoryTabs, type TabDef } from "./components/CategoryTabs";
+import { ACTION_GUIDE } from "./lib/utils/actions";
 
 interface AnalysisResult {
   url: string;
   analyzedAt: string;
   visibilityScore: number;
-  siteType: SiteTypeResult;
+  siteType: { type: string; label: string; confidence: number; signals: string[] };
   seo: {
     score: number;
     issues: {
-      id: string;
-      label: string;
-      status: "pass" | "warn" | "fail" | "skip";
-      detail: string;
-      score: number;
-      maxScore: number;
-      skipped?: boolean;
+      id: string; label: string; status: "pass" | "warn" | "fail" | "skip";
+      detail: string; score: number; maxScore: number; skipped?: boolean;
     }[];
     breakdown: { technical: number; onpage: number; structure: number };
   };
   aeo: {
     score: number;
     issues: {
-      id: string;
-      label: string;
-      status: "pass" | "warn" | "fail" | "skip";
-      detail: string;
-      score: number;
-      maxScore: number;
-      skipped?: boolean;
+      id: string; label: string; status: "pass" | "warn" | "fail" | "skip";
+      detail: string; score: number; maxScore: number; skipped?: boolean;
     }[];
     breakdown: { structure: number; content: number; schema: number };
   };
   geo: {
     score: number;
     issues: {
-      id: string;
-      label: string;
-      status: "pass" | "warn" | "fail" | "skip";
-      detail: string;
-      score: number;
-      maxScore: number;
-      skipped?: boolean;
+      id: string; label: string; status: "pass" | "warn" | "fail" | "skip";
+      detail: string; score: number; maxScore: number; skipped?: boolean;
     }[];
     markdownPreview: string;
     breakdown: { accessibility: number; readability: number; entity: number };
@@ -60,48 +41,21 @@ interface AnalysisResult {
   trust: {
     score: number;
     issues: {
-      id: string;
-      label: string;
-      status: "pass" | "warn" | "fail";
-      detail: string;
-      score: number;
-      maxScore: number;
+      id: string; label: string; status: "pass" | "warn" | "fail";
+      detail: string; score: number; maxScore: number;
     }[];
   };
-  pageSpeed: {
-    score: number;
-    lcp: string;
-    cls: string;
-    tbt: string;
-    fcp: string;
-  } | null;
+  pageSpeed: { score: number; lcp: string; cls: string; tbt: string; fcp: string } | null;
   topIssues: {
-    rank: number;
-    category: "seo" | "aeo" | "geo" | "trust";
-    id: string;
-    label: string;
-    currentScore: number;
-    maxScore: number;
-    gap: number;
-    action: string;
+    rank: number; category: "seo" | "aeo" | "geo" | "trust";
+    id: string; label: string; currentScore: number; maxScore: number; gap: number; action: string;
   }[];
 }
 
 const EXAMPLE_URLS = ["https://www.apple.com", "https://vercel.com", "https://linear.app"];
 
-function BreakdownBar({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-slate-400 w-20 flex-shrink-0">{label}</span>
-      <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-1000"
-          style={{ width: `${value}%`, backgroundColor: color }}
-        />
-      </div>
-      <span className="text-xs font-mono text-slate-300 w-8 text-right">{value}</span>
-    </div>
-  );
+function countIssues(issues: { status: string; skipped?: boolean }[], status: "fail" | "warn") {
+  return issues.filter((i) => !i.skipped && i.status === status).length;
 }
 
 export default function Home() {
@@ -114,23 +68,17 @@ export default function Home() {
   const handleAnalyze = async (targetUrl?: string) => {
     const analyzeUrl = targetUrl || url;
     if (!analyzeUrl.trim()) return;
-
     setLoading(true);
     setError(null);
     setResult(null);
-
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: analyzeUrl }),
       });
-
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "분석 중 오류가 발생했습니다.");
-        return;
-      }
+      if (!res.ok) { setError(data.error || "분석 중 오류가 발생했습니다."); return; }
       setResult(data);
     } catch {
       setError("서버에 연결할 수 없습니다.");
@@ -139,23 +87,16 @@ export default function Home() {
     }
   };
 
-  const getVisibilityGrade = (score: number) => {
-    if (score >= 80) return { text: "Excellent", color: "#22c55e" };
-    if (score >= 65) return { text: "Good", color: "#84cc16" };
-    if (score >= 50) return { text: "Fair", color: "#f59e0b" };
-    return { text: "Poor", color: "#ef4444" };
-  };
-
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
       <div className="border-b border-slate-800">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm font-bold">
               S
             </div>
-            <span className="font-semibold text-white">Visibility Analyzer</span>
+            <span className="font-semibold text-white">LOAM</span>
             <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">
               SEO · AEO · GEO
             </span>
@@ -164,15 +105,15 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-12">
-        {/* Hero + Input */}
+      <div className="max-w-5xl mx-auto px-6 py-10">
+        {/* Hero — pre-analysis only */}
         {!result && !loading && (
           <div className="text-center mb-10">
-            <h1 className="text-4xl font-bold mb-3 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              AI 시대의 웹 가시성 분석기
+            <h1 className="text-6xl font-bold mb-3 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent tracking-tight">
+              LOAM
             </h1>
             <p className="text-slate-400 text-lg">
-              SEO · AEO · GEO 점수를 한 번에 측정하고 개선 포인트를 찾아보세요
+              AI 검색 시대의 웹 가시성 분석 플랫폼
             </p>
           </div>
         )}
@@ -180,16 +121,14 @@ export default function Home() {
         {/* URL Input */}
         <div className="max-w-2xl mx-auto mb-8">
           <div className="flex gap-3">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-                placeholder="https://yoursite.com"
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
+              placeholder="https://yoursite.com"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
             <button
               onClick={() => handleAnalyze()}
               disabled={loading || !url.trim()}
@@ -198,8 +137,6 @@ export default function Home() {
               {loading ? "분석 중..." : "분석"}
             </button>
           </div>
-
-          {/* Example URLs */}
           {!result && (
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               <span className="text-xs text-slate-600">예시:</span>
@@ -216,7 +153,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* Loading State */}
+        {/* Loading */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-24 gap-5">
             <div className="flex gap-2">
@@ -242,229 +179,93 @@ export default function Home() {
         )}
 
         {/* Results */}
-        {result && (
-          <div className="space-y-8">
-            {/* Visibility Score + 3 Scores */}
-            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8">
-              <div className="flex flex-col lg:flex-row items-center gap-8">
-                {/* Big Visibility Score */}
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative w-36 h-36">
-                    <svg width="144" height="144" className="-rotate-90">
-                      <circle cx="72" cy="72" r="60" fill="none" stroke="#1e293b" strokeWidth="10" />
-                      <circle
-                        cx="72" cy="72" r="60" fill="none"
-                        stroke={getVisibilityGrade(result.visibilityScore).color}
-                        strokeWidth="10"
-                        strokeDasharray={`${2 * Math.PI * 60}`}
-                        strokeDashoffset={`${2 * Math.PI * 60 * (1 - result.visibilityScore / 100)}`}
-                        strokeLinecap="round"
-                        style={{ transition: "stroke-dashoffset 1.2s ease-out" }}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-4xl font-bold" style={{ color: getVisibilityGrade(result.visibilityScore).color }}>
-                        {result.visibilityScore}
-                      </span>
-                      <span className="text-xs font-semibold mt-1" style={{ color: getVisibilityGrade(result.visibilityScore).color }}>
-                        {getVisibilityGrade(result.visibilityScore).text}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <p className="font-bold text-white">Visibility Score</p>
-                    <p className="text-xs text-slate-500">SEO 35% · AEO 25% · GEO 25% · Trust 15%</p>
-                  </div>
-                </div>
+        {result && (() => {
+          const tabs: TabDef[] = [
+            { key: "seo",   label: "SEO",   failCount: countIssues(result.seo.issues,   "fail"), warnCount: countIssues(result.seo.issues,   "warn") },
+            { key: "aeo",   label: "AEO",   failCount: countIssues(result.aeo.issues,   "fail"), warnCount: countIssues(result.aeo.issues,   "warn") },
+            { key: "geo",   label: "GEO",   failCount: countIssues(result.geo.issues,   "fail"), warnCount: countIssues(result.geo.issues,   "warn") },
+            { key: "trust", label: "Trust", failCount: countIssues(result.trust.issues, "fail"), warnCount: countIssues(result.trust.issues, "warn") },
+          ];
 
-                {/* Divider */}
-                <div className="w-px h-32 bg-slate-700/50 hidden lg:block" />
+          return (
+            <div className="space-y-6">
+              {/* Score strip */}
+              <ScoreStrip
+                visibilityScore={result.visibilityScore}
+                seo={result.seo.score}
+                aeo={result.aeo.score}
+                geo={result.geo.score}
+                trust={result.trust.score}
+              />
 
-                {/* 4 Scores */}
-                <div className="flex gap-6 flex-1 justify-center flex-wrap">
-                  <ScoreGauge score={result.seo.score} label="SEO" color="#3b82f6" size="lg" />
-                  <ScoreGauge score={result.aeo.score} label="AEO" color="#a855f7" size="lg" />
-                  <ScoreGauge score={result.geo.score} label="GEO" color="#06b6d4" size="lg" />
-                  <ScoreGauge score={result.trust.score} label="Trust" color="#f59e0b" size="lg" />
-                </div>
+              {/* Collapsible metadata */}
+              <MetaDrawer
+                url={result.url}
+                analyzedAt={result.analyzedAt}
+                siteType={result.siteType}
+                pageSpeed={result.pageSpeed}
+              />
 
-                {/* Divider */}
-                <div className="w-px h-32 bg-slate-700/50 hidden lg:block" />
-
-                {/* Meta + PageSpeed */}
-                <div className="flex flex-col gap-4 min-w-[180px]">
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">분석 URL</p>
-                    <p className="text-xs text-blue-400 truncate max-w-[180px]">{result.url}</p>
-                  </div>
-                  {result.siteType && (
-                    <div>
-                      <p className="text-xs text-slate-500 mb-1">사이트 유형</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs bg-slate-700 text-slate-200 px-2 py-0.5 rounded-full font-medium">
-                          {result.siteType.label}
-                        </span>
-                        <span className="text-xs text-slate-500">신뢰도 {result.siteType.confidence}%</span>
-                      </div>
-                    </div>
-                  )}
-                  {result.pageSpeed && (
-                    <div>
-                      <p className="text-xs text-slate-500 mb-2">PageSpeed (Mobile)</p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[
-                          { label: "Performance", value: `${result.pageSpeed.score}`, highlight: true },
-                          { label: "LCP", value: result.pageSpeed.lcp },
-                          { label: "CLS", value: result.pageSpeed.cls },
-                          { label: "FCP", value: result.pageSpeed.fcp },
-                        ].map(({ label, value, highlight }) => (
-                          <div key={label} className="bg-slate-800 rounded-lg px-2 py-1.5">
-                            <p className="text-xs text-slate-500">{label}</p>
-                            <p className={`text-xs font-semibold ${highlight ? "text-green-400" : "text-white"}`}>
-                              {value}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Breakdown Bars */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                {
-                  title: "SEO 세부",
-                  color: "#3b82f6",
-                  bars: [
-                    { label: "기술적", value: result.seo.breakdown.technical },
-                    { label: "온페이지", value: result.seo.breakdown.onpage },
-                    { label: "구조", value: result.seo.breakdown.structure },
-                  ],
-                },
-                {
-                  title: "AEO 세부",
-                  color: "#a855f7",
-                  bars: [
-                    { label: "스키마", value: result.aeo.breakdown.schema },
-                    { label: "구조", value: result.aeo.breakdown.structure },
-                    { label: "콘텐츠", value: result.aeo.breakdown.content },
-                  ],
-                },
-                {
-                  title: "GEO 세부",
-                  color: "#06b6d4",
-                  bars: [
-                    { label: "접근성", value: result.geo.breakdown.accessibility },
-                    { label: "가독성", value: result.geo.breakdown.readability },
-                    { label: "엔티티", value: result.geo.breakdown.entity },
-                  ],
-                },
-                {
-                  title: "Trust 세부",
-                  color: "#f59e0b",
-                  bars: result.trust.issues.map((i) => ({
-                    label: i.label.length > 8 ? i.label.slice(0, 8) : i.label,
-                    value: i.maxScore > 0 ? Math.round((i.score / i.maxScore) * 100) : 0,
-                  })),
-                },
-              ].map(({ title, color, bars }) => (
-                <div key={title} className="bg-slate-900 border border-slate-700/50 rounded-xl p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                    <h3 className="text-sm font-semibold text-white">{title}</h3>
-                  </div>
-                  <div className="space-y-3">
-                    {bars.map((b) => (
-                      <BreakdownBar key={b.label} label={b.label} value={b.value} color={color} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Tab Issue Lists */}
-            <div>
-              <div className="flex gap-1 mb-4 flex-wrap">
-                {(["seo", "aeo", "geo", "trust"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
-                      activeTab === tab
-                        ? "text-white"
-                        : "text-slate-400 hover:text-slate-200 bg-slate-900"
-                    }`}
-                    style={
-                      activeTab === tab
-                        ? {
-                            backgroundColor:
-                              tab === "seo" ? "#3b82f6"
-                              : tab === "aeo" ? "#a855f7"
-                              : tab === "geo" ? "#06b6d4"
-                              : "#f59e0b",
-                          }
-                        : {}
-                    }
-                  >
-                    {tab === "trust" ? "Trust" : tab.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-
-              {activeTab === "seo" && (
-                <IssueList
-                  issues={result.seo.issues}
-                  title="SEO 항목별 분석"
-                  accentColor="#3b82f6"
-                />
+              {/* Priority actions */}
+              {result.topIssues && result.topIssues.length > 0 && (
+                <TopIssues issues={result.topIssues} />
               )}
-              {activeTab === "aeo" && (
-                <IssueList
-                  issues={result.aeo.issues}
-                  title="AEO 항목별 분석"
-                  accentColor="#a855f7"
-                />
-              )}
-              {activeTab === "geo" && (
-                <div className="space-y-4">
+
+              {/* Detail tabs */}
+              <div className="space-y-4">
+                <CategoryTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+
+                {activeTab === "seo" && (
                   <IssueList
-                    issues={result.geo.issues}
-                    title="GEO 항목별 분석"
-                    accentColor="#06b6d4"
+                    issues={result.seo.issues}
+                    title="SEO 항목별 분석"
+                    accentColor="#3b82f6"
+                    actionGuide={ACTION_GUIDE}
                   />
-                  {result.geo.markdownPreview && (
-                    <MarkdownPreview content={result.geo.markdownPreview} />
-                  )}
-                </div>
-              )}
-              {activeTab === "trust" && (
-                <IssueList
-                  issues={result.trust.issues}
-                  title="Trust 신뢰 신호 분석"
-                  accentColor="#f59e0b"
-                />
-              )}
-            </div>
+                )}
+                {activeTab === "aeo" && (
+                  <IssueList
+                    issues={result.aeo.issues}
+                    title="AEO 항목별 분석"
+                    accentColor="#a855f7"
+                    actionGuide={ACTION_GUIDE}
+                  />
+                )}
+                {activeTab === "geo" && (
+                  <div className="space-y-4">
+                    <IssueList
+                      issues={result.geo.issues}
+                      title="GEO 항목별 분석"
+                      accentColor="#06b6d4"
+                      actionGuide={ACTION_GUIDE}
+                    />
+                    {result.geo.markdownPreview && (
+                      <MarkdownPreview content={result.geo.markdownPreview} />
+                    )}
+                  </div>
+                )}
+                {activeTab === "trust" && (
+                  <IssueList
+                    issues={result.trust.issues}
+                    title="Trust 신뢰 신호 분석"
+                    accentColor="#f59e0b"
+                    actionGuide={ACTION_GUIDE}
+                  />
+                )}
+              </div>
 
-            {/* TOP 5 우선순위 */}
-            {result.topIssues && result.topIssues.length > 0 && (
-              <TopIssues issues={result.topIssues} />
-            )}
-
-            {/* Re-analyze */}
-            <div className="text-center pt-4">
-              <button
-                onClick={() => { setResult(null); setError(null); }}
-                className="text-sm text-slate-500 hover:text-slate-300 transition-colors"
-              >
-                ← 다른 URL 분석하기
-              </button>
+              {/* Re-analyze */}
+              <div className="flex justify-center pt-2">
+                <button
+                  onClick={() => { setResult(null); setError(null); }}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-medium rounded-xl transition-all"
+                >
+                  ← 다른 URL 분석하기
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </main>
   );

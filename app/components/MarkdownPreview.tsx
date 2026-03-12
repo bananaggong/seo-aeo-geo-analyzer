@@ -13,12 +13,15 @@ export function MarkdownPreview({ content }: MarkdownPreviewProps) {
     <div className="bg-slate-900 border border-slate-700/50 rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-purple-400" />
-          <h3 className="font-semibold text-white">AI가 보는 화면 미리보기</h3>
+          <div className="w-2 h-2 rounded-full bg-cyan-400" />
+          <h3 className="font-semibold text-white">GEO 마크다운 미리보기</h3>
         </div>
         <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Markdown</span>
       </div>
       <div className="p-5">
+        <p className="text-xs text-slate-500 mb-3">
+          AI 검색엔진이 이 페이지를 마크다운으로 추출하면 아래와 같이 보입니다.
+        </p>
         <pre className="text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap break-words overflow-hidden">
           {preview}
           {!expanded && content.length > 600 && "..."}

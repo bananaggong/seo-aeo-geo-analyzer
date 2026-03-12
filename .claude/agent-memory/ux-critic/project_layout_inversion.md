@@ -1,13 +1,22 @@
 ---
 name: TopIssues layout inversion
-description: TopIssues is currently rendered below the tab section, burying the most actionable content at the bottom of the page
+description: TopIssues placement relative to breakdown bars and tabs has been audited; correct order is now confirmed
 type: project
 ---
 
-The result page renders in this order: score gauges → breakdown bars → tabbed IssueList → TopIssues.
+The result page was originally: score gauges → breakdown bars → tabbed IssueList → TopIssues. This was fully inverted.
 
-This is inverted. TopIssues contains the only action text in the product. A non-expert user forms their mental model from top to bottom, so they hit score numbers they cannot act on, then raw diagnostic rows without fix instructions, and reach actionable guidance last — or not at all.
+As of the commit at fbea648, TopIssues was moved to appear after breakdown bars and before the tab section. This is better, but still sub-optimal.
 
-**Why:** Layout was likely assembled in implementation order (scores first, then details, then summary), not in user-decision order.
+**Correct canonical order (confirmed in full redesign audit, 2026-03-12):**
+1. Verdict strip (overall score + grade + one sentence)
+2. Sub-score row (SEO/AEO/GEO/Trust)
+3. TopIssues panel
+4. Detail tabs + IssueList
+5. Appendix (PageSpeed, site type, markdown preview)
 
-**How to apply:** When reviewing result page changes, verify that TopIssues (or any equivalent prioritized-action component) appears before the tabbed detail section, not after. The canonical correct order is: overall health → top priorities with actions → detailed drill-down tabs.
+The breakdown bar section (4 cards, 3 bars each) should be removed from the primary flow entirely, not just repositioned. It adds 12 unactionable numbers between scores and action guidance.
+
+**Why:** Layout was assembled in implementation order (scores → detail → summary). User decision order is (verdict → priorities → evidence).
+
+**How to apply:** Any layout or redesign work should ensure TopIssues is position 3 in reading order. Breakdown bars belong behind a disclosure toggle or removed. Verify no uninstructive number-heavy section interposes between scores and TopIssues.
