@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeSEO } from "@/app/lib/analyzers/seo";
 import { analyzeAEO } from "@/app/lib/analyzers/aeo";
 import { analyzeGEO } from "@/app/lib/analyzers/geo";
+import { analyzeTrust } from "@/app/lib/analyzers/trust";
+import { detectSiteType } from "@/app/lib/analyzers/siteType";
+import { ACTION_GUIDE } from "@/app/lib/utils/actions";
 
 const FETCH_TIMEOUT = 10000;
 
@@ -14,6 +17,54 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+interface AnyIssue {
+  id: string;
+  label: string;
+  status: string;
+  score: number;
+  maxScore: number;
+  skipped?: boolean;
+}
+
+function buildTopIssues(
+  categories: { category: "seo" | "aeo" | "geo" | "trust"; issues: AnyIssue[] }[]
+) {
+  const allIssues: {
+    rank: number;
+    category: "seo" | "aeo" | "geo" | "trust";
+    id: string;
+    label: string;
+    currentScore: number;
+    maxScore: number;
+    gap: number;
+    action: string;
+  }[] = [];
+
+  for (const { category, issues } of categories) {
+    for (const issue of issues) {
+      if (issue.skipped || issue.maxScore === 0) continue;
+      const gap = issue.maxScore - issue.score;
+      if (gap <= 0) continue;
+      allIssues.push({
+        rank: 0,
+        category,
+        id: issue.id,
+        label: issue.label,
+        currentScore: issue.score,
+        maxScore: issue.maxScore,
+        gap,
+        action: ACTION_GUIDE[issue.id] ?? "해당 항목을 개선하여 점수를 높이세요.",
+      });
+    }
+  }
+
+  // fail 우선 → warn 우선 → gap 내림차순
+  allIssues.sort((a, b) => b.gap - a.gap);
+
+  // 상위 5개 + 순위 부여
+  return allIssues.slice(0, 5).map((item, idx) => ({ ...item, rank: idx + 1 }));
 }
 
 export async function POST(req: NextRequest) {
@@ -55,64 +106,85 @@ export async function POST(req: NextRequest) {
     let robotsTxt = "";
     try {
       const robotsRes = await fetchWithTimeout(`${origin}/robots.txt`);
-      if (robotsRes.ok) {
-        robotsTxt = await robotsRes.text();
-      }
-    } catch {
-      // robots.txt 없는 경우 무시
-    }
+      if (robotsRes.ok) robotsTxt = await robotsRes.text();
+    } catch { /* ignore */ }
 
-    // 3) PageSpeed Insights API (무료, 키 불필요)
+    // 3) PageSpeed Insights API
     let pageSpeedData: Record<string, unknown> | null = null;
     try {
       const psUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(normalizedUrl)}&strategy=mobile&category=PERFORMANCE`;
       const psRes = await fetchWithTimeout(psUrl);
-      if (psRes.ok) {
-        pageSpeedData = await psRes.json() as Record<string, unknown>;
-      }
-    } catch {
-      // PageSpeed 실패 시 무시
-    }
+      if (psRes.ok) pageSpeedData = (await psRes.json()) as Record<string, unknown>;
+    } catch { /* ignore */ }
 
-    // 4) 분석 실행
+    // 4) 사이트 유형 감지
+    const siteTypeResult = detectSiteType(html, normalizedUrl);
+
+    // 5) 분석 실행
     const seoResult = analyzeSEO(html, normalizedUrl);
-    const aeoResult = analyzeAEO(html);
+    const aeoResult = analyzeAEO(html, siteTypeResult.type);
     const geoResult = analyzeGEO(html, robotsTxt, normalizedUrl);
+    const trustResult = analyzeTrust(html);
 
-    // 5) PageSpeed 데이터 통합
+    // 6) PageSpeed 데이터 정리 (점수에 별도 합산하지 않음)
     let pageSpeed: Record<string, unknown> | null = null;
     if (pageSpeedData) {
-      const cats = (pageSpeedData as Record<string, Record<string, unknown>>).lighthouseResult?.categories as Record<string, unknown> | undefined;
-      const audits = (pageSpeedData as Record<string, Record<string, unknown>>).lighthouseResult?.audits as Record<string, unknown> | undefined;
+      const lhResult = (pageSpeedData as Record<string, Record<string, unknown>>).lighthouseResult;
+      const cats = lhResult?.categories as Record<string, unknown> | undefined;
+      const audits = lhResult?.audits as Record<string, unknown> | undefined;
 
       if (cats) {
-        const perfScore = Math.round(Number((cats.performance as Record<string, unknown>)?.score ?? 0) * 100);
+        const perfScore = Math.round(
+          Number((cats.performance as Record<string, unknown>)?.score ?? 0) * 100
+        );
         const lcp = (audits?.["largest-contentful-paint"] as Record<string, unknown>)?.displayValue as string;
         const cls = (audits?.["cumulative-layout-shift"] as Record<string, unknown>)?.displayValue as string;
         const tbt = (audits?.["total-blocking-time"] as Record<string, unknown>)?.displayValue as string;
         const fcp = (audits?.["first-contentful-paint"] as Record<string, unknown>)?.displayValue as string;
-
         pageSpeed = { score: perfScore, lcp, cls, tbt, fcp };
-
-        // PageSpeed 점수를 SEO 점수에 반영
-        const psBonus = Math.round(perfScore * 0.1);
-        seoResult.score = Math.min(100, seoResult.score + psBonus);
       }
     }
 
-    // 6) 통합 Visibility Score
-    const visibilityScore = Math.round(
-      seoResult.score * 0.4 + aeoResult.score * 0.3 + geoResult.score * 0.3
-    );
+    // 7) Visibility Score
+    // Trust 15% 포함. PageSpeed가 있으면 소폭 반영 (Perf 5% 추가)
+    let visibilityScore: number;
+    if (pageSpeed) {
+      const perfScore = pageSpeed.score as number;
+      visibilityScore = Math.round(
+        seoResult.score * 0.33 +
+        aeoResult.score * 0.24 +
+        geoResult.score * 0.23 +
+        trustResult.score * 0.15 +
+        perfScore * 0.05
+      );
+    } else {
+      visibilityScore = Math.round(
+        seoResult.score * 0.35 +
+        aeoResult.score * 0.25 +
+        geoResult.score * 0.25 +
+        trustResult.score * 0.15
+      );
+    }
+
+    // 8) 개선 우선순위 TOP 5
+    const topIssues = buildTopIssues([
+      { category: "seo", issues: seoResult.issues },
+      { category: "aeo", issues: aeoResult.issues },
+      { category: "geo", issues: geoResult.issues },
+      { category: "trust", issues: trustResult.issues },
+    ]);
 
     return NextResponse.json({
       url: normalizedUrl,
       analyzedAt: new Date().toISOString(),
       visibilityScore,
+      siteType: siteTypeResult,
       seo: seoResult,
       aeo: aeoResult,
       geo: geoResult,
+      trust: trustResult,
       pageSpeed,
+      topIssues,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "분석 중 오류 발생";

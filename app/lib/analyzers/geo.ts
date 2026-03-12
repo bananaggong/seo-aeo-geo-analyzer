@@ -22,12 +22,92 @@ export interface GEOResult {
 }
 
 const AI_BOTS = [
-  { id: "gptbot", name: "GPTBot (OpenAI)", pattern: /gptbot/i },
-  { id: "claudebot", name: "ClaudeBot (Anthropic)", pattern: /claudebot|anthropic/i },
-  { id: "perplexitybot", name: "PerplexityBot", pattern: /perplexitybot/i },
-  { id: "googlebot-extended", name: "Google-Extended", pattern: /google-extended/i },
-  { id: "bytespider", name: "Bytespider (ByteDance)", pattern: /bytespider/i },
+  { id: "gptbot", name: "GPTBot (OpenAI)", pattern: /^gptbot$/i },
+  { id: "claudebot", name: "ClaudeBot (Anthropic)", pattern: /^(claudebot|anthropic-ai)$/i },
+  { id: "perplexitybot", name: "PerplexityBot", pattern: /^perplexitybot$/i },
+  { id: "google-extended", name: "Google-Extended", pattern: /^google-extended$/i },
+  { id: "bytespider", name: "Bytespider (ByteDance)", pattern: /^bytespider$/i },
 ];
+
+interface BotAccess {
+  name: string;
+  blocked: boolean;
+  blockedPaths: string[];
+  fullyBlocked: boolean;
+}
+
+/**
+ * robots.txt를 정확하게 파싱합니다.
+ * - User-agent 블록별로 파싱
+ * - Disallow: / 는 전체 차단
+ * - Disallow: /specific-path 는 경로별 차단 (부분 차단)
+ * - Allow: / 가 있으면 허용으로 복구
+ */
+function parseRobotsTxt(robotsTxt: string): BotAccess[] {
+  const lines = robotsTxt
+    .split("\n")
+    .map((l) => l.split("#")[0].trim()) // 주석 제거
+    .filter((l) => l.length > 0);
+
+  // User-agent 블록으로 분리
+  const blocks: { agents: string[]; rules: { type: "allow" | "disallow"; path: string }[] }[] = [];
+  let currentBlock: (typeof blocks)[0] | null = null;
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (lower.startsWith("user-agent:")) {
+      const agent = line.replace(/user-agent:/i, "").trim().toLowerCase();
+      if (!currentBlock || currentBlock.rules.length > 0) {
+        currentBlock = { agents: [agent], rules: [] };
+        blocks.push(currentBlock);
+      } else {
+        currentBlock.agents.push(agent);
+      }
+    } else if (lower.startsWith("disallow:")) {
+      const path = line.replace(/disallow:/i, "").trim();
+      if (currentBlock && path) {
+        currentBlock.rules.push({ type: "disallow", path });
+      }
+    } else if (lower.startsWith("allow:")) {
+      const path = line.replace(/allow:/i, "").trim();
+      if (currentBlock && path) {
+        currentBlock.rules.push({ type: "allow", path });
+      }
+    }
+  }
+
+  return AI_BOTS.map((bot) => {
+    // 이 봇에 적용되는 블록 찾기 (특정 봇 > * 순서)
+    const specificBlock = blocks.find((b) =>
+      b.agents.some((a) => bot.pattern.test(a))
+    );
+    const wildcardBlock = blocks.find((b) => b.agents.includes("*"));
+    const applicableBlock = specificBlock ?? wildcardBlock;
+
+    if (!applicableBlock) {
+      return { name: bot.name, blocked: false, blockedPaths: [], fullyBlocked: false };
+    }
+
+    const disallowRules = applicableBlock.rules.filter((r) => r.type === "disallow");
+    const allowRules = applicableBlock.rules.filter((r) => r.type === "allow");
+
+    // 전체 차단 확인: Disallow: / 이고 Allow: / 가 없는 경우
+    const hasFullDisallow = disallowRules.some((r) => r.path === "/" || r.path === "*");
+    const hasFullAllow = allowRules.some((r) => r.path === "/");
+
+    const fullyBlocked = hasFullDisallow && !hasFullAllow;
+    const blockedPaths = disallowRules
+      .filter((r) => r.path !== "/" && r.path !== "*")
+      .map((r) => r.path);
+
+    return {
+      name: bot.name,
+      blocked: fullyBlocked || blockedPaths.length > 0,
+      blockedPaths,
+      fullyBlocked,
+    };
+  });
+}
 
 export function analyzeGEO(
   html: string,
@@ -38,52 +118,54 @@ export function analyzeGEO(
   const issues: GEOIssue[] = [];
 
   // ── AI 크롤러 접근 가능성 ─────────────────────────────────
-  // robots.txt 파싱
-  const disallowedBots: string[] = [];
-  const allowedBots: string[] = [];
-
+  let botAccesses: BotAccess[] = [];
   if (robotsTxt) {
-    const lines = robotsTxt.split("\n").map((l) => l.trim());
-    let currentAgent = "";
-    let isDisallowAll = false;
-
-    for (const line of lines) {
-      if (line.startsWith("User-agent:")) {
-        currentAgent = line.replace("User-agent:", "").trim().toLowerCase();
-        isDisallowAll = false;
-      } else if (line.startsWith("Disallow:")) {
-        const path = line.replace("Disallow:", "").trim();
-        if (path === "/" || path === "*") {
-          isDisallowAll = true;
-          const matched = AI_BOTS.find((b) => b.pattern.test(currentAgent));
-          if (matched) disallowedBots.push(matched.name);
-        }
-      }
-    }
-
-    AI_BOTS.forEach((bot) => {
-      if (!disallowedBots.includes(bot.name)) allowedBots.push(bot.name);
-    });
+    botAccesses = parseRobotsTxt(robotsTxt);
   } else {
-    AI_BOTS.forEach((bot) => allowedBots.push(bot.name));
+    botAccesses = AI_BOTS.map((b) => ({
+      name: b.name,
+      blocked: false,
+      blockedPaths: [],
+      fullyBlocked: false,
+    }));
   }
 
-  const blockedCount = disallowedBots.length;
-  const allowedCount = allowedBots.length;
+  const fullyBlocked = botAccesses.filter((b) => b.fullyBlocked);
+  const partiallyBlocked = botAccesses.filter((b) => !b.fullyBlocked && b.blockedPaths.length > 0);
+  const allowed = botAccesses.filter((b) => !b.blocked);
+
+  let crawlerStatus: "pass" | "warn" | "fail";
+  let crawlerDetail: string;
+  let crawlerScore: number;
+
+  if (fullyBlocked.length === 0 && partiallyBlocked.length === 0) {
+    crawlerStatus = "pass";
+    crawlerDetail = `모든 주요 AI 크롤러 허용 (${allowed.map((b) => b.name).slice(0, 3).join(", ")} 등)`;
+    crawlerScore = 25;
+  } else if (fullyBlocked.length === 0) {
+    crawlerStatus = "warn";
+    crawlerDetail = `일부 경로 차단: ${partiallyBlocked.map((b) => b.name).join(", ")} — 특정 경로 접근 불가`;
+    crawlerScore = 18;
+  } else if (fullyBlocked.length < AI_BOTS.length) {
+    crawlerStatus = "warn";
+    crawlerDetail = `완전 차단: ${fullyBlocked.map((b) => b.name).join(", ")}`;
+    crawlerScore = Math.max(0, 25 - fullyBlocked.length * 8);
+  } else {
+    crawlerStatus = "fail";
+    crawlerDetail = `모든 AI 크롤러 차단됨 — GEO 노출 불가`;
+    crawlerScore = 0;
+  }
 
   issues.push({
     id: "ai-crawlers",
     label: "AI 크롤러 접근 허용",
-    status: blockedCount === 0 ? "pass" : blockedCount < 3 ? "warn" : "fail",
-    detail:
-      blockedCount === 0
-        ? `모든 주요 AI 크롤러 허용 (${allowedBots.slice(0, 3).join(", ")} 등)`
-        : `차단됨: ${disallowedBots.join(", ")} — GEO 노출 불가`,
-    score: blockedCount === 0 ? 25 : Math.max(0, 25 - blockedCount * 8),
+    status: crawlerStatus,
+    detail: crawlerDetail,
+    score: crawlerScore,
     maxScore: 25,
   });
 
-  // robots.txt 자체 존재 여부
+  // robots.txt 존재 여부
   issues.push({
     id: "robots-txt",
     label: "robots.txt 파일",
@@ -95,8 +177,7 @@ export function analyzeGEO(
     maxScore: 5,
   });
 
-  // ── 콘텐츠 가독성 (AI 소화율) ────────────────────────────
-  // Markdown 변환 품질
+  // ── Markdown 변환 품질 ────────────────────────────────────
   const tdService = new TurndownService({
     headingStyle: "atx",
     codeBlockStyle: "fenced",
@@ -117,7 +198,11 @@ export function analyzeGEO(
   const mdLines = markdownPreview.split("\n").filter((l) => l.trim());
   const mdHeadings = markdownPreview.match(/^#{1,6}\s/gm) || [];
   const mdQuality =
-    mdLines.length > 10 && mdHeadings.length >= 2 ? "pass" : mdLines.length > 3 ? "warn" : "fail";
+    mdLines.length > 10 && mdHeadings.length >= 2
+      ? "pass"
+      : mdLines.length > 3
+      ? "warn"
+      : "fail";
 
   issues.push({
     id: "markdown-quality",
@@ -133,7 +218,7 @@ export function analyzeGEO(
     maxScore: 15,
   });
 
-  // 문장 복잡도 (문장 평균 길이)
+  // 문장 복잡도
   const bodyText = $("body").text().replace(/\s+/g, " ").trim();
   const sentences = bodyText.split(/[.!?。]\s+/).filter((s) => s.length > 10);
   const avgSentenceLen =
@@ -143,24 +228,27 @@ export function analyzeGEO(
   issues.push({
     id: "sentence-complexity",
     label: "문장 복잡도",
-    status: avgSentenceLen <= 80 ? "pass" : avgSentenceLen <= 120 ? "warn" : "fail",
+    status: avgSentenceLen <= 100 ? "pass" : avgSentenceLen <= 150 ? "warn" : "fail",
     detail:
       avgSentenceLen === 0
         ? "분석 불가"
-        : `평균 문장 길이 ${avgSentenceLen}자 (80자 이하 권장 — AI 인용에 유리)`,
-    score: avgSentenceLen <= 80 ? 10 : avgSentenceLen <= 120 ? 5 : 2,
+        : `평균 문장 길이 ${avgSentenceLen}자 (100자 이하 권장 — AI 인용에 유리)`,
+    score: avgSentenceLen <= 100 ? 10 : avgSentenceLen <= 150 ? 5 : 2,
     maxScore: 10,
   });
 
-  // ── 브랜드 엔티티 명확성 ────────────────────────────────
-  // Organization / Brand Schema
+  // ── 브랜드 엔티티 ─────────────────────────────────────────
   let hasOrgSchema = false;
   let orgName = "";
   $('script[type="application/ld+json"]').each((_, el) => {
     try {
       const json = JSON.parse($(el).html() || "{}");
       const check = (obj: Record<string, unknown>) => {
-        if (["Organization", "LocalBusiness", "Corporation", "Brand"].includes(String(obj["@type"] || ""))) {
+        if (
+          ["Organization", "LocalBusiness", "Corporation", "Brand"].includes(
+            String(obj["@type"] || "")
+          )
+        ) {
           hasOrgSchema = true;
           orgName = String(obj["name"] || "");
         }
@@ -180,7 +268,7 @@ export function analyzeGEO(
     maxScore: 20,
   });
 
-  // Meta viewport (모바일 최적화 → AI 크롤러도 모바일 환경 고려)
+  // Viewport
   const viewport = $('meta[name="viewport"]').attr("content");
   issues.push({
     id: "viewport",
@@ -193,7 +281,7 @@ export function analyzeGEO(
     maxScore: 5,
   });
 
-  // 언어 설정
+  // HTML lang
   const htmlLang = $("html").attr("lang");
   issues.push({
     id: "lang-attr",
@@ -206,8 +294,8 @@ export function analyzeGEO(
     maxScore: 5,
   });
 
-  // Sitemap 링크 (robots.txt에서 Sitemap: 지시어)
-  const hasSitemapInRobots = /^Sitemap:/im.test(robotsTxt);
+  // Sitemap
+  const hasSitemapInRobots = /^Sitemap:\s*https?:\/\//im.test(robotsTxt);
   issues.push({
     id: "sitemap-declaration",
     label: "Sitemap 선언 (robots.txt)",

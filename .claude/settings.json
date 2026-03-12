@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "defaultMode": "acceptEdits",
+  "includeGitInstructions": true,
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git grep *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(node *)",
+      "Bash(npm run lint*)",
+      "Bash(npm run typecheck*)",
+      "Bash(npm run test*)",
+      "Bash(pnpm lint*)",
+      "Bash(pnpm typecheck*)",
+      "Bash(pnpm test*)",
+      "Bash(yarn lint*)",
+      "Bash(yarn typecheck*)",
+      "Bash(yarn test*)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(rm *)",
+      "Bash(mv *)",
+      "Bash(cp *)",
+      "WebFetch"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./.next/**)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(ssh *)",
+      "Bash(scp *)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "You are the completion gate for seo-aeo-geo-analyzer. Review this stop attempt:\\n\\n$ARGUMENTS\\n\\nAllow stopping only if ALL conditions are true:\\n1. The latest answer states what changed, or explicitly says no files were changed.\\n2. The latest answer includes verification commands/results, or a clear reason verification was skipped.\\n3. The latest answer includes at least one remaining risk, tradeoff, or assumption.\\n4. The task is materially complete for the user's latest request.\\n\\nRespond with JSON only. Return {\\\"ok\\\": true} if Claude may stop. Otherwise return {\\\"ok\\\": false, \\\"reason\\\": \\\"Tell Claude exactly what is missing before it may stop.\\\"}",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

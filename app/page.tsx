@@ -3,20 +3,30 @@ import { useState } from "react";
 import { ScoreGauge } from "./components/ScoreGauge";
 import { IssueList } from "./components/IssueList";
 import { MarkdownPreview } from "./components/MarkdownPreview";
+import { TopIssues } from "./components/TopIssues";
+
+interface SiteTypeResult {
+  type: string;
+  label: string;
+  confidence: number;
+  signals: string[];
+}
 
 interface AnalysisResult {
   url: string;
   analyzedAt: string;
   visibilityScore: number;
+  siteType: SiteTypeResult;
   seo: {
     score: number;
     issues: {
       id: string;
       label: string;
-      status: "pass" | "warn" | "fail";
+      status: "pass" | "warn" | "fail" | "skip";
       detail: string;
       score: number;
       maxScore: number;
+      skipped?: boolean;
     }[];
     breakdown: { technical: number; onpage: number; structure: number };
   };
@@ -25,14 +35,29 @@ interface AnalysisResult {
     issues: {
       id: string;
       label: string;
-      status: "pass" | "warn" | "fail";
+      status: "pass" | "warn" | "fail" | "skip";
       detail: string;
       score: number;
       maxScore: number;
+      skipped?: boolean;
     }[];
     breakdown: { structure: number; content: number; schema: number };
   };
   geo: {
+    score: number;
+    issues: {
+      id: string;
+      label: string;
+      status: "pass" | "warn" | "fail" | "skip";
+      detail: string;
+      score: number;
+      maxScore: number;
+      skipped?: boolean;
+    }[];
+    markdownPreview: string;
+    breakdown: { accessibility: number; readability: number; entity: number };
+  };
+  trust: {
     score: number;
     issues: {
       id: string;
@@ -42,8 +67,6 @@ interface AnalysisResult {
       score: number;
       maxScore: number;
     }[];
-    markdownPreview: string;
-    breakdown: { accessibility: number; readability: number; entity: number };
   };
   pageSpeed: {
     score: number;
@@ -52,6 +75,16 @@ interface AnalysisResult {
     tbt: string;
     fcp: string;
   } | null;
+  topIssues: {
+    rank: number;
+    category: "seo" | "aeo" | "geo" | "trust";
+    id: string;
+    label: string;
+    currentScore: number;
+    maxScore: number;
+    gap: number;
+    action: string;
+  }[];
 }
 
 const EXAMPLE_URLS = ["https://www.apple.com", "https://vercel.com", "https://linear.app"];
@@ -76,7 +109,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [activeTab, setActiveTab] = useState<"seo" | "aeo" | "geo">("seo");
+  const [activeTab, setActiveTab] = useState<"seo" | "aeo" | "geo" | "trust">("seo");
 
   const handleAnalyze = async (targetUrl?: string) => {
     const analyzeUrl = targetUrl || url;
@@ -240,18 +273,19 @@ export default function Home() {
                   </div>
                   <div className="text-center">
                     <p className="font-bold text-white">Visibility Score</p>
-                    <p className="text-xs text-slate-500">SEO 40% · AEO 30% · GEO 30%</p>
+                    <p className="text-xs text-slate-500">SEO 35% · AEO 25% · GEO 25% · Trust 15%</p>
                   </div>
                 </div>
 
                 {/* Divider */}
                 <div className="w-px h-32 bg-slate-700/50 hidden lg:block" />
 
-                {/* 3 Scores */}
-                <div className="flex gap-8 flex-1 justify-center">
+                {/* 4 Scores */}
+                <div className="flex gap-6 flex-1 justify-center flex-wrap">
                   <ScoreGauge score={result.seo.score} label="SEO" color="#3b82f6" size="lg" />
                   <ScoreGauge score={result.aeo.score} label="AEO" color="#a855f7" size="lg" />
                   <ScoreGauge score={result.geo.score} label="GEO" color="#06b6d4" size="lg" />
+                  <ScoreGauge score={result.trust.score} label="Trust" color="#f59e0b" size="lg" />
                 </div>
 
                 {/* Divider */}
@@ -263,6 +297,17 @@ export default function Home() {
                     <p className="text-xs text-slate-500 mb-1">분석 URL</p>
                     <p className="text-xs text-blue-400 truncate max-w-[180px]">{result.url}</p>
                   </div>
+                  {result.siteType && (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">사이트 유형</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs bg-slate-700 text-slate-200 px-2 py-0.5 rounded-full font-medium">
+                          {result.siteType.label}
+                        </span>
+                        <span className="text-xs text-slate-500">신뢰도 {result.siteType.confidence}%</span>
+                      </div>
+                    </div>
+                  )}
                   {result.pageSpeed && (
                     <div>
                       <p className="text-xs text-slate-500 mb-2">PageSpeed (Mobile)</p>
@@ -288,7 +333,7 @@ export default function Home() {
             </div>
 
             {/* Breakdown Bars */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 {
                   title: "SEO 세부",
@@ -317,6 +362,14 @@ export default function Home() {
                     { label: "엔티티", value: result.geo.breakdown.entity },
                   ],
                 },
+                {
+                  title: "Trust 세부",
+                  color: "#f59e0b",
+                  bars: result.trust.issues.map((i) => ({
+                    label: i.label.length > 8 ? i.label.slice(0, 8) : i.label,
+                    value: i.maxScore > 0 ? Math.round((i.score / i.maxScore) * 100) : 0,
+                  })),
+                },
               ].map(({ title, color, bars }) => (
                 <div key={title} className="bg-slate-900 border border-slate-700/50 rounded-xl p-5">
                   <div className="flex items-center gap-2 mb-4">
@@ -334,8 +387,8 @@ export default function Home() {
 
             {/* Tab Issue Lists */}
             <div>
-              <div className="flex gap-1 mb-4">
-                {(["seo", "aeo", "geo"] as const).map((tab) => (
+              <div className="flex gap-1 mb-4 flex-wrap">
+                {(["seo", "aeo", "geo", "trust"] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -348,12 +401,15 @@ export default function Home() {
                       activeTab === tab
                         ? {
                             backgroundColor:
-                              tab === "seo" ? "#3b82f6" : tab === "aeo" ? "#a855f7" : "#06b6d4",
+                              tab === "seo" ? "#3b82f6"
+                              : tab === "aeo" ? "#a855f7"
+                              : tab === "geo" ? "#06b6d4"
+                              : "#f59e0b",
                           }
                         : {}
                     }
                   >
-                    {tab.toUpperCase()}
+                    {tab === "trust" ? "Trust" : tab.toUpperCase()}
                   </button>
                 ))}
               </div>
@@ -384,7 +440,19 @@ export default function Home() {
                   )}
                 </div>
               )}
+              {activeTab === "trust" && (
+                <IssueList
+                  issues={result.trust.issues}
+                  title="Trust 신뢰 신호 분석"
+                  accentColor="#f59e0b"
+                />
+              )}
             </div>
+
+            {/* TOP 5 우선순위 */}
+            {result.topIssues && result.topIssues.length > 0 && (
+              <TopIssues issues={result.topIssues} />
+            )}
 
             {/* Re-analyze */}
             <div className="text-center pt-4">

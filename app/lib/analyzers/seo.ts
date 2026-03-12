@@ -19,6 +19,29 @@ export interface SEOResult {
   };
 }
 
+/**
+ * 텍스트의 단어/어절 수를 추정합니다.
+ * 한국어: 공백 기준 어절 카운트 (영어보다 밀도가 높아 0.6 보정)
+ * 영어: 공백 기준 단어 카운트
+ */
+function estimateWordCount(text: string): number {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return 0;
+
+  // 한글 포함 비율로 언어 판단
+  const koreanChars = (cleaned.match(/[\uAC00-\uD7A3]/g) || []).length;
+  const totalChars = cleaned.replace(/\s/g, "").length;
+  const koreanRatio = totalChars > 0 ? koreanChars / totalChars : 0;
+
+  const tokens = cleaned.split(" ").filter((w) => w.length > 0);
+
+  if (koreanRatio > 0.3) {
+    // 한국어: 어절 1개 ≒ 영어 단어 1.7개 수준이므로 상향 보정
+    return Math.round(tokens.length * 1.7);
+  }
+  return tokens.filter((w) => w.length > 1).length;
+}
+
 export function analyzeSEO(html: string, url: string): SEOResult {
   const $ = cheerio.load(html);
   const issues: SEOIssue[] = [];
@@ -35,9 +58,9 @@ export function analyzeSEO(html: string, url: string): SEOResult {
     maxScore: 10,
   });
 
-  // robots.txt (페이지 내 robots meta)
+  // robots meta
   const robotsMeta = $('meta[name="robots"]').attr("content") || "";
-  const noindex = robotsMeta.includes("noindex");
+  const noindex = robotsMeta.toLowerCase().includes("noindex");
   issues.push({
     id: "robots-meta",
     label: "Robots Meta 태그",
@@ -51,7 +74,7 @@ export function analyzeSEO(html: string, url: string): SEOResult {
     maxScore: 8,
   });
 
-  // Canonical URL
+  // Canonical
   const canonical = $('link[rel="canonical"]').attr("href");
   issues.push({
     id: "canonical",
@@ -67,38 +90,29 @@ export function analyzeSEO(html: string, url: string): SEOResult {
   const title = $("title").text().trim();
   const titleLen = title.length;
   const titleStatus =
-    titleLen >= 30 && titleLen <= 60
-      ? "pass"
-      : titleLen > 0
-      ? "warn"
-      : "fail";
+    titleLen >= 20 && titleLen <= 70 ? "pass" : titleLen > 0 ? "warn" : "fail";
   issues.push({
     id: "title",
     label: "Title 태그",
     status: titleStatus,
     detail: title
-      ? `"${title.slice(0, 50)}${title.length > 50 ? "..." : ""}" (${titleLen}자)`
+      ? `"${title.slice(0, 60)}${title.length > 60 ? "..." : ""}" (${titleLen}자)`
       : "title 태그 없음",
     score: titleStatus === "pass" ? 12 : titleStatus === "warn" ? 6 : 0,
     maxScore: 12,
   });
 
   // Meta Description
-  const metaDesc =
-    $('meta[name="description"]').attr("content")?.trim() || "";
+  const metaDesc = $('meta[name="description"]').attr("content")?.trim() || "";
   const descLen = metaDesc.length;
   const descStatus =
-    descLen >= 80 && descLen <= 160
-      ? "pass"
-      : descLen > 0
-      ? "warn"
-      : "fail";
+    descLen >= 60 && descLen <= 165 ? "pass" : descLen > 0 ? "warn" : "fail";
   issues.push({
     id: "meta-description",
     label: "Meta Description",
     status: descStatus,
     detail: metaDesc
-      ? `${descLen}자 (권장: 80~160자)`
+      ? `${descLen}자 (권장: 60~165자)`
       : "meta description 없음 — 검색 결과 스니펫 미표시",
     score: descStatus === "pass" ? 10 : descStatus === "warn" ? 5 : 0,
     maxScore: 10,
@@ -122,7 +136,7 @@ export function analyzeSEO(html: string, url: string): SEOResult {
     maxScore: 10,
   });
 
-  // Heading 구조 (H2 존재 여부)
+  // Heading 구조
   const h2Count = $("h2").length;
   issues.push({
     id: "heading-structure",
@@ -140,8 +154,7 @@ export function analyzeSEO(html: string, url: string): SEOResult {
     allImgs.length > 0
       ? Math.round(((allImgs.length - missingAlt) / allImgs.length) * 100)
       : 100;
-  const altStatus =
-    altRatio === 100 ? "pass" : altRatio >= 70 ? "warn" : "fail";
+  const altStatus = altRatio === 100 ? "pass" : altRatio >= 70 ? "warn" : "fail";
   issues.push({
     id: "image-alt",
     label: "이미지 Alt 텍스트",
@@ -167,27 +180,24 @@ export function analyzeSEO(html: string, url: string): SEOResult {
   jsonLdScripts.each((_, el) => {
     try {
       const json = JSON.parse($(el).html() || "{}");
-      const type = json["@type"] || (Array.isArray(json) ? "Array" : "Unknown");
-      schemaTypes.push(type);
-    } catch {
-      // ignore parse error
-    }
+      const extract = (obj: Record<string, unknown>) => {
+        const t = obj["@type"];
+        if (t) schemaTypes.push(Array.isArray(t) ? t.join("+") : String(t));
+      };
+      if (Array.isArray(json)) json.forEach(extract);
+      else extract(json as Record<string, unknown>);
+    } catch { /* ignore */ }
   });
   issues.push({
     id: "schema-markup",
     label: "Schema Markup (JSON-LD)",
     status:
-      schemaTypes.length >= 2
-        ? "pass"
-        : schemaTypes.length === 1
-        ? "warn"
-        : "fail",
+      schemaTypes.length >= 2 ? "pass" : schemaTypes.length === 1 ? "warn" : "fail",
     detail:
       schemaTypes.length > 0
         ? `발견: ${schemaTypes.join(", ")}`
         : "Schema 마크업 없음 — 리치 결과 노출 불가",
-    score:
-      schemaTypes.length >= 2 ? 10 : schemaTypes.length === 1 ? 5 : 0,
+    score: schemaTypes.length >= 2 ? 10 : schemaTypes.length === 1 ? 5 : 0,
     maxScore: 10,
   });
 
@@ -211,9 +221,11 @@ export function analyzeSEO(html: string, url: string): SEOResult {
   });
 
   // Internal Links
+  let hostname = "";
+  try { hostname = new URL(url).hostname; } catch { /* ignore */ }
   const internalLinks = $("a[href]").filter((_, el) => {
     const href = $(el).attr("href") || "";
-    return href.startsWith("/") || href.includes(new URL(url).hostname);
+    return href.startsWith("/") || (!!hostname && href.includes(hostname));
   }).length;
   issues.push({
     id: "internal-links",
@@ -224,9 +236,9 @@ export function analyzeSEO(html: string, url: string): SEOResult {
     maxScore: 5,
   });
 
-  // Word Count (콘텐츠 충분성)
-  const bodyText = $("body").text().replace(/\s+/g, " ").trim();
-  const wordCount = bodyText.split(" ").filter((w) => w.length > 1).length;
+  // Word Count — 한국어/영어 보정 포함
+  const bodyText = $("body").text();
+  const wordCount = estimateWordCount(bodyText);
   issues.push({
     id: "content-length",
     label: "콘텐츠 분량",
@@ -236,19 +248,66 @@ export function analyzeSEO(html: string, url: string): SEOResult {
     maxScore: 5,
   });
 
+  // ── 주제 집중도 (Topic Concentration) ────────────────────
+  // title, H1, H2에서 2글자 이상 단어 추출 후 교집합으로 집중도 판단
+  const extractKeywords = (text: string): Set<string> => {
+    return new Set(
+      text
+        .toLowerCase()
+        .replace(/[^\w\uAC00-\uD7A3\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 2)
+    );
+  };
+
+  const titleKeywords = extractKeywords(title);
+  const h1Keywords = extractKeywords(h1s.first().text());
+  const h2Keywords = new Set<string>();
+  $("h2").each((_, el) => {
+    extractKeywords($(el).text()).forEach((k) => h2Keywords.add(k));
+  });
+
+  // title ∩ H1 교집합
+  const titleH1Common = [...titleKeywords].filter((k) => h1Keywords.has(k));
+  // title ∩ H1 ∩ 최소 2개 H2 교집합
+  const titleH1H2Common = titleH1Common.filter((k) => h2Keywords.has(k));
+
+  const topicStatus: "pass" | "warn" | "fail" =
+    titleH1H2Common.length >= 1
+      ? "pass"
+      : titleH1Common.length >= 1
+      ? "warn"
+      : "fail";
+
+  issues.push({
+    id: "topic-concentration",
+    label: "주제 집중도 (Topic Concentration)",
+    status: title && h1Count > 0 ? topicStatus : "fail",
+    detail:
+      title && h1Count > 0
+        ? topicStatus === "pass"
+          ? `핵심 키워드 "${titleH1H2Common[0]}" 등이 타이틀·H1·H2 전반에 일관되게 사용됨`
+          : topicStatus === "warn"
+          ? `타이틀-H1 공통 키워드: "${titleH1Common[0]}" — H2에도 포함 권장`
+          : "타이틀·H1·H2 간 공통 키워드 없음 — 주제 일관성 낮음"
+        : "타이틀 또는 H1 없어 분석 불가",
+    score: (title && h1Count > 0) ? (topicStatus === "pass" ? 10 : topicStatus === "warn" ? 5 : 0) : 0,
+    maxScore: 10,
+  });
+
   const totalScore = issues.reduce((sum, i) => sum + i.score, 0);
   const maxTotal = issues.reduce((sum, i) => sum + i.maxScore, 0);
   const normalizedScore = Math.round((totalScore / maxTotal) * 100);
 
   const techIds = ["https", "robots-meta", "canonical"];
   const onpageIds = ["title", "meta-description", "h1", "image-alt", "og-tags", "internal-links", "content-length"];
-  const structureIds = ["heading-structure", "schema-markup"];
+  const structureIds = ["heading-structure", "schema-markup", "topic-concentration"];
 
   const calcGroup = (ids: string[]) => {
     const group = issues.filter((i) => ids.includes(i.id));
     const got = group.reduce((s, i) => s + i.score, 0);
     const max = group.reduce((s, i) => s + i.maxScore, 0);
-    return Math.round((got / max) * 100);
+    return max > 0 ? Math.round((got / max) * 100) : 0;
   };
 
   return {
