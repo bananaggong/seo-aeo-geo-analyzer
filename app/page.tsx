@@ -49,6 +49,7 @@ interface AnalysisResult {
   topIssues: {
     rank: number; category: "seo" | "aeo" | "geo" | "trust";
     id: string; label: string; currentScore: number; maxScore: number; gap: number; action: string;
+    actionTitle?: string; priority?: number;
   }[];
 }
 
@@ -189,30 +190,27 @@ export default function Home() {
 
           return (
             <div className="space-y-6">
-              {/* Score strip */}
-              <ScoreStrip
-                visibilityScore={result.visibilityScore}
-                seo={result.seo.score}
-                aeo={result.aeo.score}
-                geo={result.geo.score}
-                trust={result.trust.score}
-              />
+              {/* Zone 1 — Verdict */}
+              <div className="border-b border-slate-700/50 pb-6">
+                <ScoreStrip
+                  visibilityScore={result.visibilityScore}
+                  seo={result.seo.score}
+                  aeo={result.aeo.score}
+                  geo={result.geo.score}
+                  trust={result.trust.score}
+                />
+              </div>
 
-              {/* Collapsible metadata */}
-              <MetaDrawer
-                url={result.url}
-                analyzedAt={result.analyzedAt}
-                siteType={result.siteType}
-                pageSpeed={result.pageSpeed}
-              />
-
-              {/* Priority actions */}
+              {/* Zone 2 — Action */}
               {result.topIssues && result.topIssues.length > 0 && (
-                <TopIssues issues={result.topIssues} />
+                <div className="border-t-2 border-amber-400/40 pt-6">
+                  <TopIssues issues={result.topIssues} />
+                </div>
               )}
 
-              {/* Detail tabs */}
-              <div className="space-y-4">
+              {/* Zone 3 — Reference */}
+              <div className="border-t border-slate-700/50 pt-6 space-y-4">
+                <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">항목별 상세 분석</p>
                 <CategoryTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
                 {activeTab === "seo" && (
@@ -252,6 +250,14 @@ export default function Home() {
                     actionGuide={ACTION_GUIDE}
                   />
                 )}
+
+                {/* Collapsible metadata — moved to Zone 3 bottom */}
+                <MetaDrawer
+                  url={result.url}
+                  analyzedAt={result.analyzedAt}
+                  siteType={result.siteType}
+                  pageSpeed={result.pageSpeed}
+                />
               </div>
 
               {/* Re-analyze */}

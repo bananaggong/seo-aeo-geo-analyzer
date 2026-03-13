@@ -11,6 +11,8 @@ interface PriorityIssue {
   maxScore: number;
   gap: number;
   action: string;
+  actionTitle?: string;
+  priority?: number;
 }
 
 interface TopIssuesProps {
@@ -61,15 +63,29 @@ export function TopIssues({ issues }: TopIssuesProps) {
                     <span
                       className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
                       style={{ backgroundColor: cat.bg, color: cat.hex, border: `1px solid ${cat.border}` }}
+                      title="항목 내 회수 가능 점수"
                     >
-                      +{gapPct}%
+                      +{Math.round(issue.gap)}pt
                     </span>
                   </div>
 
-                  {/* Action text — primary output */}
-                  <p className="text-sm text-slate-200 mt-2 leading-relaxed">
-                    {issue.action}
-                  </p>
+                  {/* Gap bar */}
+                  <div className="mt-2 mb-2 h-1 rounded-full bg-slate-700/50">
+                    <div
+                      className="h-1 rounded-full opacity-70"
+                      style={{ width: `${Math.min(100, gapPct)}%`, backgroundColor: cat.hex }}
+                    />
+                  </div>
+
+                  {/* Action text — visually separated */}
+                  <div className="bg-slate-800/60 rounded-lg px-3 py-2 mt-1">
+                    <p className="text-xs text-blue-400 font-semibold mb-1">
+                      → {issue.actionTitle ?? "해결 방법"}:
+                    </p>
+                    <p className="text-sm text-slate-200 leading-relaxed">
+                      {issue.action}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

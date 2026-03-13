@@ -21,8 +21,7 @@ export function CategoryTabs({ tabs, activeTab, onTabChange }: CategoryTabsProps
       {tabs.map((tab) => {
         const isActive = tab.key === activeTab;
         const cat = CATEGORY_COLORS[tab.key];
-        const issueCount = tab.failCount + tab.warnCount;
-        const allPass = issueCount === 0;
+        const allPass = tab.failCount === 0 && tab.warnCount === 0;
 
         return (
           <button
@@ -37,16 +36,18 @@ export function CategoryTabs({ tabs, activeTab, onTabChange }: CategoryTabsProps
             {allPass ? (
               <span className="text-xs text-green-400 font-bold">✓</span>
             ) : (
-              <span
-                className="text-xs font-bold px-1.5 py-0.5 rounded-full"
-                style={
-                  isActive
-                    ? { backgroundColor: "rgba(255,255,255,0.25)", color: "#fff" }
-                    : { backgroundColor: cat.bg, color: cat.hex }
-                }
-              >
-                {issueCount}
-              </span>
+              <>
+                {tab.failCount > 0 && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-red-500/20 text-red-400">
+                    {tab.failCount}
+                  </span>
+                )}
+                {tab.warnCount > 0 && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-yellow-500/20 text-yellow-400 ml-0.5">
+                    {tab.warnCount}
+                  </span>
+                )}
+              </>
             )}
           </button>
         );

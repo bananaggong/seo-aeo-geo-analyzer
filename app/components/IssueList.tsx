@@ -30,7 +30,7 @@ const STATUS_CONFIG = {
 
 export function IssueList({ issues, title, accentColor, actionGuide }: IssueListProps) {
   const [filter, setFilter] = useState<Filter>("fail+warn");
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const activeIssues = issues.filter((i) => !i.skipped);
   const skippedIssues = issues.filter((i) => i.skipped);
@@ -42,13 +42,20 @@ export function IssueList({ issues, title, accentColor, actionGuide }: IssueList
   };
   const actionableCount = counts.fail + counts.warn;
 
+  const failFirst = (arr: Issue[]) =>
+    [...arr].sort((a, b) => {
+      if (a.status === 'fail' && b.status !== 'fail') return -1;
+      if (a.status !== 'fail' && b.status === 'fail') return 1;
+      return 0;
+    });
+
   const filtered = (() => {
     switch (filter) {
-      case "fail+warn": return activeIssues.filter((i) => i.status === "fail" || i.status === "warn");
+      case "fail+warn": return failFirst(activeIssues.filter((i) => i.status === "fail" || i.status === "warn"));
       case "fail":      return activeIssues.filter((i) => i.status === "fail");
       case "warn":      return activeIssues.filter((i) => i.status === "warn");
       case "pass":      return activeIssues.filter((i) => i.status === "pass");
-      case "all":       return [...activeIssues, ...skippedIssues];
+      case "all":       return failFirst([...activeIssues, ...skippedIssues]);
     }
   })();
 
@@ -105,15 +112,21 @@ export function IssueList({ issues, title, accentColor, actionGuide }: IssueList
 
           {/* Issue rows */}
           <div className="divide-y divide-slate-700/30">
-            {filtered.length === 0 && filter === "fail+warn" && (
+            {filtered.length === 0 && (
               <div className="px-5 py-6 text-center">
-                <p className="text-sm text-green-400 font-medium">모든 항목이 통과되었습니다 ✓</p>
-                <button
-                  onClick={() => setFilter("all")}
-                  className="text-xs text-slate-500 hover:text-slate-300 mt-2 transition-colors"
-                >
-                  통과 항목 보기
-                </button>
+                {filter === "fail+warn" ? (
+                  <>
+                    <p className="text-sm text-green-400 font-medium">모든 항목이 통과되었습니다 ✓</p>
+                    <button
+                      onClick={() => setFilter("all")}
+                      className="text-xs text-slate-500 hover:text-slate-300 mt-2 transition-colors"
+                    >
+                      통과 항목 보기
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-500">해당 필터의 항목이 없습니다</p>
+                )}
               </div>
             )}
             {filtered.map((issue) => {

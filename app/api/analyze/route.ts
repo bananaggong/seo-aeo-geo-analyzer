@@ -4,7 +4,7 @@ import { analyzeAEO } from "@/app/lib/analyzers/aeo";
 import { analyzeGEO } from "@/app/lib/analyzers/geo";
 import { analyzeTrust } from "@/app/lib/analyzers/trust";
 import { detectSiteType } from "@/app/lib/analyzers/siteType";
-import { ACTION_GUIDE } from "@/app/lib/utils/actions";
+import { ACTION_GUIDE, ACTION_TEMPLATES } from "@/app/lib/utils/actions";
 
 const FETCH_TIMEOUT = 10000;
 
@@ -28,6 +28,8 @@ interface AnyIssue {
   skipped?: boolean;
 }
 
+const SEVERITY_WEIGHTS: Record<string, number> = { high: 1.5, medium: 1.0, low: 0.6 };
+
 function buildTopIssues(
   categories: { category: "seo" | "aeo" | "geo" | "trust"; issues: AnyIssue[] }[]
 ) {
@@ -40,6 +42,8 @@ function buildTopIssues(
     maxScore: number;
     gap: number;
     action: string;
+    actionTitle: string;
+    priority: number;
   }[] = [];
 
   for (const { category, issues } of categories) {
@@ -47,6 +51,15 @@ function buildTopIssues(
       if (issue.skipped || issue.maxScore === 0) continue;
       const gap = issue.maxScore - issue.score;
       if (gap <= 0) continue;
+
+      const template = ACTION_TEMPLATES[issue.id];
+      const impact = template?.impact ?? 5;
+      const effort = Math.max(1, template?.effort ?? 5);
+      const severity = template?.severity ?? 'medium';
+      const severityWeight = SEVERITY_WEIGHTS[severity] ?? 1.0;
+      const normalizedGap = issue.maxScore > 0 ? gap / issue.maxScore : 0;
+      const priority = (impact * severityWeight * normalizedGap) / effort;
+
       allIssues.push({
         rank: 0,
         category,
@@ -56,12 +69,14 @@ function buildTopIssues(
         maxScore: issue.maxScore,
         gap,
         action: ACTION_GUIDE[issue.id] ?? "해당 항목을 개선하여 점수를 높이세요.",
+        actionTitle: template?.title ?? issue.label,
+        priority,
       });
     }
   }
 
-  // fail 우선 → warn 우선 → gap 내림차순
-  allIssues.sort((a, b) => b.gap - a.gap);
+  // priority 내림차순 정렬
+  allIssues.sort((a, b) => b.priority - a.priority);
 
   // 상위 5개 + 순위 부여
   return allIssues.slice(0, 5).map((item, idx) => ({ ...item, rank: idx + 1 }));
