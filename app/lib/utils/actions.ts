@@ -70,7 +70,7 @@ export const ACTION_TEMPLATES: Record<string, ActionTemplate> = {
   },
   "topic-concentration": {
     title: "핵심 키워드 정렬 — 타이틀·H1·H2 일관성 확보",
-    body: "타이틀, H1, 주요 H2에 동일한 핵심 키워드가 반복되도록 콘텐츠를 정렬하세요.",
+    body: "타이틀의 핵심 단어를 H1에 그대로 사용하고, H2 소제목 2–3개에도 동일 단어나 동의어를 포함하세요. 예: 타이틀 '무료 배송 서비스' → H1 '무료 배송 안내' → H2 '무료 배송 조건'.",
     impact: 6, effort: 4, severity: 'medium',
   },
   // AEO
@@ -100,8 +100,8 @@ export const ACTION_TEMPLATES: Record<string, ActionTemplate> = {
     impact: 6, effort: 3, severity: 'medium',
   },
   "statistics": {
-    title: "구체적 수치 3개 이상 — 콘텐츠 신뢰도 강화",
-    body: "구체적인 수치(%, 개수, 날짜)를 3개 이상 포함해 콘텐츠 신뢰도를 높이세요.",
+    title: "정량 수치 3개 이상 — 콘텐츠 신뢰도 확보",
+    body: "비율(%), 수량, 금액 등 정량 수치를 3개 이상 포함해 콘텐츠 신뢰도를 높이세요.",
     impact: 7, effort: 3, severity: 'medium',
   },
   "citations": {
@@ -110,8 +110,8 @@ export const ACTION_TEMPLATES: Record<string, ActionTemplate> = {
     impact: 7, effort: 3, severity: 'medium',
   },
   "definition-sentences": {
-    title: "'~란 ~이다' 정의 문장 추가 — 첫 단락에 1~2개",
-    body: "콘텐츠 첫 단락에 '~란 ~이다' 형식의 명확한 정의 문장을 1~2개 추가하세요.",
+    title: "정의 문장 3개 추가 — AI 직접 인용 확률 상승",
+    body: "핵심 용어를 정의하는 문장 3개를 첫 단락에 추가하세요. 예: 'X란 Y를 의미합니다', 'X는 Y를 뜻합니다', 'X라고도 불립니다'. AI 답변 엔진은 이 형식의 문장을 직접 인용합니다.",
     impact: 7, effort: 2, severity: 'medium',
   },
   "comparison-structure": {

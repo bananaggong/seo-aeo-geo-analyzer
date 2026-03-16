@@ -227,15 +227,29 @@ export function analyzeAEO(html: string, siteType: SiteType = "unknown"): AEORes
   });
 
   // ── 수치/통계 데이터 ──────────────────────────────────────
-  const bodyText = $("body").text();
+  // nav/header/footer 날짜·가격이 오탐되지 않도록 본문 영역으로 텍스트 범위를 제한
+  const statsSelectors = ["main", "article", ".content", "#content", ".post", ".entry-content", "section"];
+  let statsArea = $("body");
+  for (const sel of statsSelectors) {
+    if ($(sel).length > 0) {
+      statsArea = $(sel) as unknown as typeof $["prototype"] & ReturnType<typeof $>;
+      break;
+    }
+  }
+  const statsText = statsArea.text();
   const statsMatches =
-    bodyText.match(/\d+(\.\d+)?(%|개|명|건|배|원|달러|\$|회|위|년|월|kb|mb|gb|ms|px|명|kg|km)/gi) || [];
+    statsText.match(/\d+(\.\d+)?(%|개|명|건|배|원|달러|\$|회|위|년|월|kb|mb|gb|ms|px|kg|km)/gi) || [];
 
   pushIssue({
     id: "statistics",
-    label: "수치/통계 데이터",
+    label: "데이터 근거",
     status: statsMatches.length >= 3 ? "pass" : statsMatches.length >= 1 ? "warn" : "fail",
-    detail: `${statsMatches.length}개 수치 발견 (AI는 구체적 수치 포함 콘텐츠를 더 많이 인용)`,
+    detail:
+      statsMatches.length >= 3
+        ? `${statsMatches.length}개 정량 수치 확인 — 비율, 수량, 금액 데이터 근거 충분`
+        : statsMatches.length >= 1
+        ? `수치 ${statsMatches.length}개 — ${3 - statsMatches.length}개 더 필요. 퍼센트·수량·금액 같은 구체적 데이터가 AI 인용을 높입니다`
+        : "정량 수치 없음 — '응답률 90%', '3가지 방법' 같은 구체적 데이터가 없으면 AI가 인용하지 않습니다",
     rawScore: statsMatches.length >= 3 ? 10 : statsMatches.length >= 1 ? 5 : 0,
     rawMax: 10,
   });
@@ -273,7 +287,10 @@ export function analyzeAEO(html: string, siteType: SiteType = "unknown"): AEORes
   });
 
   // ── 정의형 문장 감지 ──────────────────────────────────────
-  const definitionPattern = /(이란\s*(무엇|what)?|란\s*(무엇)?|\s+is\s+a\s+|\s+refers\s+to\s+|을\s*의미하|를\s*의미하|means\s+that|defined\s+as)/gi;
+  // '~란', '~을 의미하', '~를 뜻합니다', '~라고 불립니다' 등 정의형 표현 감지
+  // 주의: '이라고 합니다/한다'는 인용 표지(quotation marker)로 오탐 위험 높아 제외
+  const bodyText = $("body").text();
+  const definitionPattern = /(이란\s*(무엇|what)?|란\s*(무엇)?|\s+is\s+a\s+|\s+refers\s+to\s+|을\s*의미하|를\s*의미하|means\s+that|defined\s+as|(?:을|를)\s*뜻(?:합니다|한다)|(?:이라고|라고)\s+불립니다)/gi;
   const definitionMatches = bodyText.match(definitionPattern) || [];
 
   pushIssue({
@@ -281,9 +298,11 @@ export function analyzeAEO(html: string, siteType: SiteType = "unknown"): AEORes
     label: "정의형 문장",
     status: definitionMatches.length >= 3 ? "pass" : definitionMatches.length >= 1 ? "warn" : "fail",
     detail:
-      definitionMatches.length >= 1
-        ? `${definitionMatches.length}개 정의형 표현 발견 ('~란', '~이다' 형식 — AI 직접 인용 가능)`
-        : "정의형 문장 없음 — '~란 ~이다' 형식 추가 시 AI 인용 확률 상승",
+      definitionMatches.length >= 3
+        ? `${definitionMatches.length}개 정의형 표현 발견 ('~란', '~을 의미합니다', '~를 뜻합니다' 등 — AI가 직접 인용 가능)`
+        : definitionMatches.length >= 1
+        ? `정의형 표현 ${definitionMatches.length}개 — AI 인용 기준(3개)까지 ${3 - definitionMatches.length}개 더 필요. '~란', '~을 의미합니다', '~를 뜻합니다' 형식으로 추가하세요`
+        : "정의형 문장 없음 — AI는 'X란 Y를 의미합니다'처럼 명확한 정의 문장을 직접 인용합니다. 핵심 용어를 정의하는 문장 3개를 첫 단락에 추가하세요",
     rawScore: definitionMatches.length >= 3 ? 15 : definitionMatches.length >= 1 ? 7 : 0,
     rawMax: 15,
   });

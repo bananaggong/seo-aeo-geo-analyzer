@@ -9,9 +9,14 @@ type: project
 - ACTION_GUIDE strings in actions.ts are specific, concrete, and copyable. They name the exact element, tag, or attribute to change. This is the right model for action text anywhere in the UI.
 - The TopIssues gap bar visually encodes improvement magnitude well — bar width plus "+N점" label is intuitive.
 - Status icons (checkmark / warning / X) combined with color-coded borders on IssueList rows are effective for fast scanning.
+- The warn detail pattern "${n}개 더 필요" (e.g. "3개 더 필요") is effective for telling users the exact gap to the next threshold. Used in statistics check; replicate across all multi-threshold checks (definition-sentences, citations, question-headings).
+- Concrete example forms in fail/warn copy reduce ambiguity more than abstract pattern notation. "X란 Y를 의미합니다" is more actionable than "'~란 ~이다' 형식".
 
 ## Patterns that create confusion
 
+- Copy that names a regex pattern the code does not actually detect destroys trust when the user follows instructions and gets a wrong result. Every example form in detail/action text must be traceable to an actual regex match path. (Discovered in definition-sentences: '~이다' was named in copy but never in the regex.)
+- When pass and warn share the same detail branch, the warn signal is invisible. Every check with three status tiers (pass/warn/fail) must have three distinct detail strings.
+- ACTION_GUIDE counts (e.g. "1~2개 추가") must match the analyzer pass threshold (e.g. >= 3). Contradictions between guide and analyzer erode trust in the score.
 - Showing currentScore/maxScore AND percentage simultaneously in a TopIssues row is redundant. Use one or the other.
 - The gap bar label "+{n}점 개선 가능" is uninterpretable without a denominator anchor. Users do not know if +5 out of 20 is big or small. Add context (e.g. "of 20 pts") or show percentage of total score impact instead.
 - Trust breakdown bars truncate issue labels to 8 characters which can produce mid-character cuts and looks like a rendering bug. Trust labels need a longer budget or a different layout.

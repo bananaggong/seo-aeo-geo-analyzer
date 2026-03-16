@@ -249,19 +249,29 @@ export function analyzeSEO(html: string, url: string): SEOResult {
   });
 
   // ── 주제 집중도 (Topic Concentration) ────────────────────
-  // title, H1, H2에서 2글자 이상 단어 추출 후 교집합으로 집중도 판단
+  // title, H1, H2에서 키워드 추출 후 교집합으로 집중도 판단
+  // 한국어 기능어(후치사·접속사·어미)는 어느 페이지에나 등장해 오탐을 유발하므로 제외
+  const TOPIC_STOP_WORDS = new Set([
+    "위한", "위해", "대한", "관한", "통한", "통해", "따른", "따라", // 후치사
+    "하는", "있는", "없는", "되는", "하여", "되어",                 // 관형사형 어미
+    "또는", "그리고", "하지만", "그러나", "그래서", "따라서",        // 접속사
+    "이후", "이전", "것이", "것을", "것은", "것도",                 // 지시·시간어
+    "the", "and", "for", "with", "this", "that", "from",          // 영어 불용어
+  ]);
+
   const extractKeywords = (text: string): Set<string> => {
     return new Set(
       text
         .toLowerCase()
         .replace(/[^\w\uAC00-\uD7A3\s]/g, " ")
         .split(/\s+/)
-        .filter((w) => w.length >= 2)
+        .filter((w) => w.length >= 2 && !TOPIC_STOP_WORDS.has(w))
     );
   };
 
   const titleKeywords = extractKeywords(title);
   const h1Keywords = extractKeywords(h1s.first().text());
+  const h2ElemCount = $("h2").length;
   const h2Keywords = new Set<string>();
   $("h2").each((_, el) => {
     extractKeywords($(el).text()).forEach((k) => h2Keywords.add(k));
@@ -269,7 +279,7 @@ export function analyzeSEO(html: string, url: string): SEOResult {
 
   // title ∩ H1 교집합
   const titleH1Common = [...titleKeywords].filter((k) => h1Keywords.has(k));
-  // title ∩ H1 ∩ 최소 2개 H2 교집합
+  // title ∩ H1 ∩ H2 교집합
   const titleH1H2Common = titleH1Common.filter((k) => h2Keywords.has(k));
 
   const topicStatus: "pass" | "warn" | "fail" =
@@ -279,17 +289,24 @@ export function analyzeSEO(html: string, url: string): SEOResult {
       ? "warn"
       : "fail";
 
+  const topicKeywordsPass = titleH1H2Common.slice(0, 2).map((k) => `"${k}"`).join(", ");
+  const topicKeywordsWarn = titleH1Common.slice(0, 2).map((k) => `"${k}"`).join(", ");
+  const topicFailDetail =
+    h2ElemCount === 0
+      ? "H2 소제목이 없습니다 — 핵심 키워드를 담은 H2 소제목을 2–3개 추가하세요"
+      : "타이틀·H1·H2에 공통 키워드 없음 — 타이틀의 핵심 단어를 H1과 최소 1개의 H2 소제목에 그대로 사용하세요";
+
   issues.push({
     id: "topic-concentration",
-    label: "주제 집중도 (Topic Concentration)",
+    label: "키워드 제목 일관성",
     status: title && h1Count > 0 ? topicStatus : "fail",
     detail:
       title && h1Count > 0
         ? topicStatus === "pass"
-          ? `핵심 키워드 "${titleH1H2Common[0]}" 등이 타이틀·H1·H2 전반에 일관되게 사용됨`
+          ? `타이틀·H1·H2 모두에 ${topicKeywordsPass} 등 핵심 키워드 사용 확인됨`
           : topicStatus === "warn"
-          ? `타이틀-H1 공통 키워드: "${titleH1Common[0]}" — H2에도 포함 권장`
-          : "타이틀·H1·H2 간 공통 키워드 없음 — 주제 일관성 낮음"
+          ? `타이틀-H1 공통 키워드 ${topicKeywordsWarn} — H2 소제목에도 같은 키워드를 추가하세요`
+          : topicFailDetail
         : "타이틀 또는 H1 없어 분석 불가",
     score: (title && h1Count > 0) ? (topicStatus === "pass" ? 10 : topicStatus === "warn" ? 5 : 0) : 0,
     maxScore: 10,
