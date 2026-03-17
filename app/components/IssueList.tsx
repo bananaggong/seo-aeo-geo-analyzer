@@ -30,7 +30,7 @@ const STATUS_CONFIG = {
 
 export function IssueList({ issues, title, accentColor, actionGuide }: IssueListProps) {
   const [filter, setFilter] = useState<Filter>("fail+warn");
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
   const activeIssues = issues.filter((i) => !i.skipped);
   const skippedIssues = issues.filter((i) => i.skipped);
